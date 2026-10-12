@@ -1,0 +1,139 @@
+"""Шаг 05 — аблация: снимает ли общая компонента отказ (GPU).
+
+Интервенция — частичная аблация направления во всех слоях (вход блока, выход attn, выход
+mlp — как в rdo.py): h <- h - a (h·v) v, a ∈ alphas. Коэффициент a — ручка для KL:
+сравнивать направления честно только при близком KL.
+
+Метрики (прокси по первому токену, judge-based ASR — позже):
+  ASR — доля harmful_test домена с refusal_metric < 0 (отказ снят), по каждому домену;
+  KL  — на harmless_test между распределениями следующего токена до и после аблации,
+        kl_div_fn(baseline, ablated) с reduction='batchmean', как в rdo.py.
+
+Направления: общая компонента w, DIM каждого домена, каждый из 20 векторов RDO, n_rand
+случайных. Test-сплиты не фильтруются: базовый ASR без аблации печатается отдельно.
+
+Пишет results/<model>/ablation/ablation.json и reports/ablation.md.
+"""
+import argparse
+import os
+
+import torch
+
+from common import load_config, load_vectors, read_json, results_dir, splits_dir, write_json, write_report
+
+TEMPLATES = {
+    "qwen2.5": ("<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant."
+                "<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"),
+}
+REFUSAL_TOKS = {"qwen2.5": [40, 2121]}   # 'I', 'As' — как в rdo.py
+
+
+def family(model):
+    for k in TEMPLATES:
+        if k in model.lower():
+            return k
+    raise ValueError(f"нет шаблона и refusal-токенов для {model}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="configs/qwen2.5-3b.yaml")
+    args = ap.parse_args()
+    cfg = load_config(args.config)
+    ac = cfg["ablation"]
+    domains = list(cfg["domains"])
+
+    from nnsight import LanguageModel
+    from scoring import projection_einops, refusal_metric
+
+    fam = family(cfg["model"])
+    template, refusal_toks = TEMPLATES[fam], REFUSAL_TOKS[fam]
+    model = LanguageModel(cfg["model"], cache_dir=os.getenv("HUGGINGFACE_CACHE_DIR"),
+                          device_map="auto", torch_dtype=torch.bfloat16)
+    model.requires_grad_(False)
+    with model.trace("Hello"):   # загрузить веса на GPU до обращения к model.device
+        pass
+
+    def prompts(domain, harmtype):
+        rows = read_json(os.path.join(splits_dir(cfg, domain), f"{harmtype}_test.json"))
+        return [template.format(instruction=r["instruction"]) for r in rows]
+
+    harmful = {d: prompts(d, "harmful") for d in domains}
+    harmless = prompts(domains[0], "harmless")
+
+    names, V = load_vectors(cfg)
+    w = torch.load(results_dir(cfg, "component", "component.pt"), map_location="cpu", weights_only=True)["w"]
+    g = torch.Generator().manual_seed(0)
+    dirs = [("w", w.float())] + [(n, v.float()) for n, v in zip(names, V)]
+    for i in range(ac["n_rand"]):
+        r = torch.randn(w.shape[0], generator=g)
+        dirs.append((f"rand_{i}", r / r.norm()))
+
+    bs = ac["batch_size"]
+
+    def run(ps, v, a, want):
+        v = None if v is None else (v / v.norm()).to(model.dtype).to(model.device)
+        out = []
+        for i in range(0, len(ps), bs):
+            with model.trace(ps[i:i + bs]):
+                if v is not None:
+                    for layer in model.model.layers:
+                        layer.input -= a * projection_einops(layer.input, v)
+                        at = layer.self_attn.output[0][:]
+                        layer.self_attn.output[0][:] -= a * projection_einops(at, v)
+                        mp = layer.mlp.output[:]
+                        layer.mlp.output[:] -= a * projection_einops(mp, v)
+                logits = model.lm_head.output[:, -1]
+                s = (refusal_metric(logits, refusal_toks) if want == "metric" else logits).save()
+            out.append(s.value.detach().float().cpu())
+            torch.cuda.empty_cache()
+        return torch.cat(out)
+
+    def kl(base, abl):
+        return float(torch.nn.functional.kl_div(torch.log_softmax(base.double(), -1),
+                                                torch.softmax(abl.double(), -1), reduction="batchmean"))
+
+    base_asr = {d: float((run(harmful[d], None, 0, "metric") < 0).float().mean()) for d in domains}
+    base_logits = run(harmless, None, 0, "logits")
+    print("без аблации: " + "  ".join(f"{d}={x:.3f}" for d, x in base_asr.items()), flush=True)
+
+    rows = []
+    for name, v in dirs:
+        for a in ac["alphas"]:
+            asr = {d: float((run(harmful[d], v, a, "metric") < 0).float().mean()) for d in domains}
+            row = {"direction": name, "alpha": a, "kl": kl(base_logits, run(harmless, v, a, "logits")),
+                   "asr": asr, "asr_mean": sum(asr.values()) / len(asr)}
+            rows.append(row)
+            print(f"{name:14s} a={a:.2f}  KL={row['kl']:.4f}  ASR=" +
+                  " ".join(f"{d}:{x:.3f}" for d, x in asr.items()), flush=True)
+
+    write_json({"base_asr": base_asr, "n_test": {d: len(p) for d, p in harmful.items()},
+                "n_harmless": len(harmless), "rows": rows}, results_dir(cfg, "ablation", "ablation.json"))
+
+    # отчёт: w, DIM, случайные — построчно; RDO — среднее по 5 сидам домена
+    def agg(label, rs):
+        return {"direction": label, "kl": sum(r["kl"] for r in rs) / len(rs),
+                "asr": {d: sum(r["asr"][d] for r in rs) / len(rs) for d in domains},
+                "asr_mean": sum(r["asr_mean"] for r in rs) / len(rs)}
+
+    table = []
+    for a in ac["alphas"]:
+        at = [r for r in rows if r["alpha"] == a]
+        table += [dict(r) for r in at if not r["direction"].startswith(("rdo_", "rand_"))]
+        table += [agg(f"rdo_{d} (5 сидов)", [r for r in at if r["direction"].startswith(f"rdo_{d}_")]) for d in domains]
+        table += [agg("rand (среднее)", [r for r in at if r["direction"].startswith("rand_")])]
+        for r in table[-(len(domains) + 1):]:
+            r["alpha"] = a
+    lines = [f"# Аблация — {cfg['model_alias']}", "",
+             "ASR — доля harmful_test с refusal_metric < 0; KL — на harmless_test. "
+             "**Сравнивать направления только при близком KL.**", "",
+             "Без аблации: " + ", ".join(f"{d} {x:.3f}" for d, x in base_asr.items()) + ".", "",
+             "| направление | a | KL | " + " | ".join(f"ASR {d}" for d in domains) + " | ASR среднее |",
+             "|---|---|---|" + "---|" * (len(domains) + 1)]
+    lines += [f"| {r['direction']} | {r['alpha']:.2f} | {r['kl']:.4f} | " +
+              " | ".join(f"{r['asr'][d]:.3f}" for d in domains) + f" | **{r['asr_mean']:.3f}** |" for r in table]
+    write_report(cfg, "ablation.md", lines)
+
+
+if __name__ == "__main__":
+    main()

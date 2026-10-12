@@ -5,7 +5,8 @@ description = "A shared refusal component across DIM and RDO directions for SALA
 requires-python = ">=3.10,<3.11"
 dependencies = [
     "geometry-of-refusal",
-    "datasets",
+    "datasets>=3.0",
+    "pandas",
     "pyyaml",
 ]
 
@@ -16,5 +17,5 @@ geometry-of-refusal = { path = "../geometry-of-refusal", editable = true }
 
 [tool.uv]
 package = false
-# Окружение разворачивается только на сервере (Linux): под Intel-macOS нет колёс torch>=2.4.
-environments = ["sys_platform == 'linux'"]
+# Linux — сервер (GPU), macOS arm64 — локальные CPU-проверки.
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin' and platform_machine == 'arm64'"]
