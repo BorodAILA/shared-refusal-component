@@ -1,0 +1,20 @@
+[project]
+name = "shared-refusal-component"
+version = "0.1.0"
+description = "A shared refusal component across DIM and RDO directions for SALAD-Bench harm domains."
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "geometry-of-refusal",
+    "datasets",
+    "pyyaml",
+]
+
+# На время разработки — editable из соседнего репозитория (локально disser/, на сервере
+# ~/f.zakharov/). Перед публикацией заменить на git-зависимость с зафиксированным коммитом.
+[tool.uv.sources]
+geometry-of-refusal = { path = "../geometry-of-refusal", editable = true }
+
+[tool.uv]
+package = false
+# Окружение разворачивается только на сервере (Linux): под Intel-macOS нет колёс torch>=2.4.
+environments = ["sys_platform == 'linux'"]

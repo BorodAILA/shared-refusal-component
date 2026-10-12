@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+zakh_env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Данные, веса, чекпоинты, логи (в git не храним)
+data/
+datasets/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+logs/
+wandb/
+outputs/
+
+# Секреты
+.env
+*.secret
+
+# ОС / редакторы
+.DS_Store
+.vscode/
+.idea/
+
+# Результаты прогонов (векторы, json) — на сервере, в git не храним
+results/

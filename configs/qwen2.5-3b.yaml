@@ -1,0 +1,33 @@
+model: Qwen/Qwen2.5-3B-Instruct
+
+# SALAD-Bench base_set, фильтр по 1-category
+domains: [O1, O2, O5, O6]
+
+# Одинаковый размер для всех доменов; потолок задаёт O6 (1717 строк)
+splits:
+  n_train: null   # TODO: зафиксировать
+  n_val: null
+  n_test: null
+  split_seed: 0
+
+# Одна точка (pos, layer) на все домены: выбирается на объединённом val (шаг 01)
+# и пишется в results/<model>/manifest.json
+extraction_point: auto
+
+# RDO, одномерные конусы (k = 1); 20 разных сидов
+rdo:
+  k: 1
+  seeds:
+    O1: [1, 2, 3, 4, 5]
+    O2: [6, 7, 8, 9, 10]
+    O5: [11, 12, 13, 14, 15]
+    O6: [16, 17, 18, 19, 20]
+
+# Общая компонента: P = (1/N) sum v v^T по всем 24 векторам (20 RDO + 4 DIM)
+component:
+  weights: equal
+  n_null: 500
+
+# Аблация: прокси-ASR (refusal_metric < 0) при выравненном KL на harmless
+ablation:
+  alphas: [0.25, 0.5, 0.75, 1.0]
