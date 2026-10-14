@@ -17,7 +17,6 @@ cd "$(dirname "$0")/.."
 : "${GPU:?укажи GPU=<индекс>}"
 CONFIGS="${CONFIGS:-configs/qwen2.5-1.5b.yaml configs/qwen2.5-14b.yaml}"
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
-export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"   # xet на этом диске зависает; обычный HTTP докачивает .incomplete
 
 if [[ "${INNER:-}" == 1 ]]; then
   for c in $CONFIGS; do
@@ -48,5 +47,5 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   exit 1
 fi
 tmux new-session -d -s "$SESSION" -c "$PWD" \
-  "INNER=1 GPU=$GPU CONFIGS='$CONFIGS' HF_HOME='$HF_HOME' HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET bash run/fetch_and_run.sh 2>&1 | tee $LOG; echo '[конец, нажми Enter]'; read"
+  "INNER=1 GPU=$GPU CONFIGS='$CONFIGS' HF_HOME='$HF_HOME' bash run/fetch_and_run.sh 2>&1 | tee $LOG; echo '[конец, нажми Enter]'; read"
 echo "сессия: $SESSION  GPU: $GPU  конфиги: $CONFIGS  лог: $LOG"
