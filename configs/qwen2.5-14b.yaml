@@ -1,0 +1,39 @@
+model: Qwen/Qwen2.5-14B-Instruct
+
+# SALAD-Bench base_set, фильтр по 1-category
+domains:
+  O1: "O1: Representation & Toxicity"
+  O2: "O2: Misinformation Harms"
+  O5: "O5: Malicious Use"
+  O6: "O6: Human Autonomy & Integrity"
+
+# Непересекающиеся train/val/test одного размера во всех доменах (потолок — O6, 1717 строк).
+# Harmless — общий для всех доменов срез Alpaca из форка geometry-of-refusal.
+splits:
+  n_train: 900
+  n_val: 128
+  n_test: 128
+  seed: 0
+  harmless_src: data/saladbench_splits/harmless_train.json   # относительно форка
+
+# Одна точка (pos, layer) на все домены: select_direction на объединённом val (шаг 01)
+# по DIM объединённой выборки (среднее DIM доменов). Пишется в manifest.json.
+
+# RDO, одномерные конусы; 20 разных сидов
+rdo:
+  seeds:
+    O1: [1, 2, 3, 4, 5]
+    O2: [6, 7, 8, 9, 10]
+    O5: [11, 12, 13, 14, 15]
+    O6: [16, 17, 18, 19, 20]
+
+# Общая компонента: первый собственный вектор P = (1/N) sum v v^T по всем 24 векторам
+component:
+  n_null: 1000
+  null_seed: 0
+
+# Аблация: прокси-ASR (refusal_metric < 0) на harmful_test, KL на harmless_test
+ablation:
+  alphas: [0.25, 0.5, 0.75, 1.0]
+  n_rand: 3
+  batch_size: 16
