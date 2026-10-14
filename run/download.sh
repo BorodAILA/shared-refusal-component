@@ -14,6 +14,7 @@ cd "$(dirname "$0")/.."
 
 MODELS="${MODELS:-Qwen/Qwen2.5-1.5B-Instruct Qwen/Qwen2.5-14B-Instruct}"
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"   # xet на этом диске зависает; обычный HTTP докачивает .incomplete
 
 if [[ "${INNER:-}" == 1 ]]; then
   df -h "$HF_HOME" | tail -1
@@ -38,5 +39,5 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   exit 1
 fi
 tmux new-session -d -s "$SESSION" -c "$PWD" \
-  "INNER=1 MODELS='$MODELS' HF_HOME='$HF_HOME' bash run/download.sh 2>&1 | tee $LOG; echo '[конец, нажми Enter]'; read"
+  "INNER=1 MODELS='$MODELS' HF_HOME='$HF_HOME' HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET bash run/download.sh 2>&1 | tee $LOG; echo '[конец, нажми Enter]'; read"
 echo "сессия: $SESSION  модели: $MODELS  лог: $LOG"
