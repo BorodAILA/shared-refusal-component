@@ -66,6 +66,20 @@ def unit(v):
     return v / v.norm()
 
 
+# Из чего строится общая компонента (шаги 03–05): all — 4 DIM + 20 RDO; rdo — только 20 RDO,
+# тогда сравнение с DIM не круговое. Вариант rdo пишет в component_rdo/, energy_rdo/, ablation_rdo/.
+COMPONENT = os.getenv("COMPONENT", "all")
+assert COMPONENT in ("all", "rdo"), f"COMPONENT={COMPONENT}: ожидается all или rdo"
+
+
+def variant(name):
+    """component → component_rdo, ablation.md → ablation_rdo.md; при COMPONENT=all имя не меняется."""
+    if COMPONENT == "all":
+        return name
+    stem, dot, ext = name.partition(".")
+    return f"{stem}_{COMPONENT}{dot}{ext}"
+
+
 def load_vectors(cfg):
     """Все 24 вектора в фиксированном порядке: по доменам — DIM, затем RDO по сидам.
     Возвращает (names, V [N, hidden] float64, единичные строки)."""

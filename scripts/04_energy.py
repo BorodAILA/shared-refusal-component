@@ -15,7 +15,7 @@ import os
 
 import torch
 
-from common import dim_dir, load_config, rdo_dir, results_dir, unit, update_manifest, write_json, write_report
+from common import dim_dir, load_config, rdo_dir, results_dir, unit, update_manifest, variant, write_json, write_report
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
     cfg = load_config(args.config)
     domains = list(cfg["domains"])
 
-    w = torch.load(results_dir(cfg, "component", "component.pt"), map_location="cpu", weights_only=True)["w"].double()
+    w = torch.load(results_dir(cfg, variant("component"), "component.pt"), map_location="cpu", weights_only=True)["w"].double()
     hidden = w.shape[0]
     dims = {d: unit(torch.load(os.path.join(dim_dir(cfg, d), "direction.pt"), map_location="cpu", weights_only=True).double())
             for d in domains}
@@ -42,15 +42,19 @@ def main():
         rows[d] = {"dim_energy": float((w @ dims[d]) ** 2), "rdo_cos2_mean": sum(rdo_cos2) / len(rdo_cos2)}
 
     dim_cos = {a: {b: float(dims[a] @ dims[b]) for b in domains} for a in domains}
-    summary = {"random_level": 1 / hidden, "domains": rows, "dim_cos": dim_cos, "init_control": init_rows}
-    write_json(summary, results_dir(cfg, "energy", "energy.json"))
-    update_manifest(cfg, "energy", {d: r["dim_energy"] for d, r in rows.items()})
+    Q, _ = torch.linalg.qr(torch.stack([dims[d] for d in domains]).T)
+    span = float(((Q.T @ w) ** 2).sum())                  # доля энергии w в оболочке всех DIM
+    summary = {"random_level": 1 / hidden, "domains": rows, "dim_cos": dim_cos, "dim_span_energy": span,
+               "init_control": init_rows}
+    write_json(summary, results_dir(cfg, variant("energy"), "energy.json"))
+    update_manifest(cfg, variant("energy"), {d: r["dim_energy"] for d, r in rows.items()})
 
     lines = [f"# Доля общей компоненты в DIM — {cfg['model_alias']}", "",
              f"Случайный уровень cos² = 1/hidden = {1 / hidden:.5f}.", "",
              "| домен | доля энергии DIM вдоль w | остаток | средний cos²(w, RDO) |", "|---|---|---|---|"]
     lines += [f"| {d} | **{r['dim_energy']:.3f}** | {1 - r['dim_energy']:.3f} | {r['rdo_cos2_mean']:.3f} |"
               for d, r in rows.items()]
+    lines += ["", f"Оболочка всех {len(domains)} DIM покрывает **{span:.3f}** энергии w."]
     lines += ["", "cos между DIM доменов (одна точка извлечения):", "",
               "| | " + " | ".join(domains) + " |", "|---" * (len(domains) + 1) + "|"]
     lines += [f"| {a} | " + " | ".join(f"{dim_cos[a][b]:.3f}" for b in domains) + " |" for a in domains]
@@ -59,7 +63,7 @@ def main():
     lines += ["", "Контроль общего старта (20 сидов):", "",
               f"- cos²(w, старт): среднее {sum(c2) / len(c2):.5f}, максимум {max(c2):.5f}",
               f"- cos(итог, старт): среднее {sum(cf) / len(cf):.3f}, от {min(cf):.3f} до {max(cf):.3f}"]
-    write_report(cfg, "energy.md", lines)
+    write_report(cfg, variant("energy.md"), lines)
     for d, r in rows.items():
         print(f"{d}: доля DIM вдоль w = {r['dim_energy']:.3f}")
 

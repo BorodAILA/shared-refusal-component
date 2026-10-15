@@ -19,7 +19,7 @@ import os
 
 import torch
 
-from common import load_config, load_vectors, read_json, results_dir, splits_dir, write_json, write_report
+from common import COMPONENT, load_config, load_vectors, read_json, results_dir, splits_dir, variant, write_json, write_report
 
 TEMPLATES = {
     "qwen2.5": ("<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant."
@@ -64,7 +64,7 @@ def main():
     harmless = prompts(domains[0], "harmless")
 
     names, V = load_vectors(cfg)
-    w = torch.load(results_dir(cfg, "component", "component.pt"), map_location="cpu", weights_only=True)["w"]
+    w = torch.load(results_dir(cfg, variant("component"), "component.pt"), map_location="cpu", weights_only=True)["w"]
     g = torch.Generator().manual_seed(0)
     dirs = [("w", w.float())] + [(n, v.float()) for n, v in zip(names, V)]
     for i in range(ac["n_rand"]):
@@ -110,7 +110,7 @@ def main():
                   " ".join(f"{d}:{x:.3f}" for d, x in asr.items()), flush=True)
 
     write_json({"base_asr": base_asr, "n_test": {d: len(p) for d, p in harmful.items()},
-                "n_harmless": len(harmless), "rows": rows}, results_dir(cfg, "ablation", "ablation.json"))
+                "n_harmless": len(harmless), "rows": rows}, results_dir(cfg, variant("ablation"), "ablation.json"))
 
     # отчёт: w, DIM, случайные — построчно; RDO — среднее по 5 сидам домена
     def agg(label, rs):
@@ -129,12 +129,13 @@ def main():
     lines = [f"# Аблация — {cfg['model_alias']}", "",
              "ASR — доля harmful_test с refusal_metric < 0; KL — на harmless_test. "
              "**Сравнивать направления только при близком KL.**", "",
+             "w построена " + ("по 4 DIM + 20 RDO." if COMPONENT == "all" else "только по 20 RDO (DIM не участвуют)."), "",
              "Без аблации: " + ", ".join(f"{d} {x:.3f}" for d, x in base_asr.items()) + ".", "",
              "| направление | a | KL | " + " | ".join(f"ASR {d}" for d in domains) + " | ASR среднее |",
              "|---|---|---|" + "---|" * (len(domains) + 1)]
     lines += [f"| {r['direction']} | {r['alpha']:.2f} | {r['kl']:.4f} | " +
               " | ".join(f"{r['asr'][d]:.3f}" for d in domains) + f" | **{r['asr_mean']:.3f}** |" for r in table]
-    write_report(cfg, "ablation.md", lines)
+    write_report(cfg, variant("ablation.md"), lines)
 
 
 if __name__ == "__main__":

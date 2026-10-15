@@ -18,7 +18,7 @@ import os
 
 import torch
 
-from common import load_config, load_vectors, results_dir, update_manifest, write_json, write_report
+from common import COMPONENT, load_config, load_vectors, results_dir, update_manifest, variant, write_json, write_report
 
 
 def spectrum(V):
@@ -38,14 +38,15 @@ def main():
     cc = cfg["component"]
 
     names, V = load_vectors(cfg)
-    N, hidden = V.shape
-    lam, W = spectrum(V)
+    use = [i for i, n in enumerate(names) if COMPONENT == "all" or n.startswith("rdo_")]
+    N, hidden = len(use), V.shape[1]
+    lam, W = spectrum(V[use])
     w = W[:, 0]
     mean_dim = V[[i for i, n in enumerate(names) if n.startswith("dim_")]].mean(0)
     if w @ mean_dim < 0:
         w = -w
-    cos = V @ w                                            # [N], со знаком
-    assert torch.allclose((cos ** 2).mean(), lam[0], atol=1e-8)
+    cos = V @ w                                            # [24], со знаком; DIM — и когда не в построении
+    assert torch.allclose((cos[use] ** 2).mean(), lam[0], atol=1e-8)
 
     g = torch.Generator().manual_seed(cc["null_seed"])
     null = []
@@ -55,7 +56,7 @@ def main():
     null = torch.stack(null)
     null_mean, null_p95, null_max = float(null.mean()), float(null.quantile(0.95)), float(null.max())
 
-    out = results_dir(cfg, "component")
+    out = results_dir(cfg, variant("component"))
     os.makedirs(out, exist_ok=True)
     torch.save({"w": w.float(), "lam": lam[:8].float(), "names": names, "cos": cos.float()},
                f"{out}/component.pt")
@@ -63,17 +64,18 @@ def main():
                "null": {"mean": null_mean, "p95": null_p95, "max": null_max, "n": cc["n_null"]},
                "cos": dict(zip(names, map(float, cos)))}
     write_json(summary, f"{out}/component.json")
-    update_manifest(cfg, "component", {"lam1": float(lam[0]), "null_p95": null_p95})
+    update_manifest(cfg, variant("component"), {"lam1": float(lam[0]), "null_p95": null_p95})
 
+    built = "4 DIM + 20 RDO" if COMPONENT == "all" else "только 20 RDO; DIM в построении не участвуют"
     lines = [f"# Общая компонента — {cfg['model_alias']}", "",
-             f"N = {N} векторов (4 DIM + 20 RDO), равные веса, hidden = {hidden}.", "",
+             f"N = {N} векторов ({built}), равные веса, hidden = {hidden}.", "",
              "| | λ1 | λ2 | λ3 | нуль: среднее | нуль: p95 | нижняя граница 1/N |",
              "|---|---|---|---|---|---|---|",
              f"| | **{lam[0]:.3f}** | {lam[1]:.3f} | {lam[2]:.3f} | {null_mean:.3f} | {null_p95:.3f} | {1 / N:.3f} |",
              "", "cos(w, v) по векторам (знак w — по среднему DIM):", "",
              "| вектор | cos | cos² |", "|---|---|---|"]
     lines += [f"| {n} | {c:+.3f} | {c * c:.3f} |" for n, c in zip(names, cos.tolist())]
-    write_report(cfg, "component.md", lines)
+    write_report(cfg, variant("component.md"), lines)
     print(f"lam1={lam[0]:.3f}  lam2={lam[1]:.3f}  нуль p95={null_p95:.3f}")
 
 
