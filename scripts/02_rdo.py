@@ -33,6 +33,10 @@ def main():
                "--dim_dir", dim_dir(cfg, d), "--splits_dir", splits_dir(cfg, d),
                "--targets_dir", os.path.join(rdo_dir(cfg, d), "targets"),
                "--out_dir", rdo_dir(cfg, d), "--seeds", *seeds]
+        # батчи генерации таргетов и фильтра — только если заданы в конфиге (крупным моделям не хватает памяти)
+        for key in ("target_generation_batch_size", "filter_batch_size"):
+            if key in cfg["rdo"]:
+                cmd += [f"--{key}", str(cfg["rdo"][key])]
         print(f"=== {d}: сиды {' '.join(seeds)} ===", flush=True)
         subprocess.run(cmd, cwd=FORK, env=env, check=True)
 

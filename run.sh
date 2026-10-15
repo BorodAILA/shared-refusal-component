@@ -16,6 +16,7 @@ CONFIG="${CONFIG:-configs/qwen2.5-3b.yaml}"
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 export HUGGINGFACE_CACHE_DIR="${HUGGINGFACE_CACHE_DIR:-$HF_HOME/hub}"
 export WANDB_MODE="${WANDB_MODE:-disabled}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 echo "[$SCRIPT] config=$CONFIG  GPU=${CUDA_VISIBLE_DEVICES:-—}"
 uv run python "$SCRIPT" --config "$CONFIG" "$@"
