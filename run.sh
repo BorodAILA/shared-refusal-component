@@ -17,6 +17,8 @@ export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 export HUGGINGFACE_CACHE_DIR="${HUGGINGFACE_CACHE_DIR:-$HF_HOME/hub}"
 export WANDB_MODE="${WANDB_MODE:-disabled}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+# offline: true в конфиге — модель только из HF-кэша, без запросов к хабу (закрытые репозитории)
+grep -q '^offline: *true' "$CONFIG" && export HF_HUB_OFFLINE=1
 
-echo "[$SCRIPT] config=$CONFIG  GPU=${CUDA_VISIBLE_DEVICES:-—}"
+echo "[$SCRIPT] config=$CONFIG  GPU=${CUDA_VISIBLE_DEVICES:-—}${HF_HUB_OFFLINE:+  offline}"
 uv run python "$SCRIPT" --config "$CONFIG" "$@"

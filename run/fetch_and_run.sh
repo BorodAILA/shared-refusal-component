@@ -3,7 +3,7 @@
 # Всё в одной tmux-сессии; общий лог logs/fetch_and_run_<время>.log, у каждого прогона ещё свой
 # logs/<имя конфига>_<время>.log. Падение одной модели не останавливает следующие.
 #
-#   GPU=0 bash run/fetch_and_run.sh                                         # Qwen2.5-1.5B, затем 14B
+#   GPU=0 bash run/fetch_and_run.sh                                         # Llama-3.2-1B, 3.2-3B, 3.1-8B
 #   GPU=0 CONFIGS="configs/qwen2.5-14b.yaml" bash run/fetch_and_run.sh      # свой список
 #   tmux attach -t lb_fetch_run                                             # посмотреть (выйти: Ctrl-b d)
 #
@@ -15,7 +15,7 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 cd "$(dirname "$0")/.."
 
 : "${GPU:?укажи GPU=<индекс>}"
-CONFIGS="${CONFIGS:-configs/qwen2.5-1.5b.yaml configs/qwen2.5-14b.yaml}"
+CONFIGS="${CONFIGS:-configs/llama3.2-1b.yaml configs/llama3.2-3b.yaml configs/llama3.1-8b.yaml}"
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 
 if [[ "${INNER:-}" == 1 ]]; then
@@ -23,8 +23,9 @@ if [[ "${INNER:-}" == 1 ]]; then
     [[ -f "$c" ]] || { echo "нет файла $c — пропускаю" >&2; continue; }
     model="$(sed -n 's/^model: *\([^ #]*\).*/\1/p' "$c")"
     name="$(basename "$c" .yaml)"
+    off=0; grep -q '^offline: *true' "$c" && off=1    # offline: true — только проверить, что веса уже в кэше
     echo "================ $name: закачка $model — $(date '+%F %T') ================"
-    if ! uv run python -c "
+    if ! HF_HUB_OFFLINE=$off uv run python -c "
 import sys
 from huggingface_hub import snapshot_download
 print('готово:', snapshot_download(sys.argv[1], allow_patterns=['*.json', '*.safetensors', '*.txt', '*.model', 'tokenizer*']))" "$model"; then
