@@ -19,22 +19,8 @@ import os
 
 import torch
 
-from common import COMPONENT, load_config, load_vectors, read_json, results_dir, splits_dir, variant, write_json, write_report
-
-TEMPLATES = {
-    "qwen2.5": ("<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant."
-                "<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"),
-    "llama-3": ("<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
-                "{instruction}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"),
-}
-REFUSAL_TOKS = {"qwen2.5": [40, 2121], "llama-3": [40]}   # 'I', 'As' / 'I' — как в rdo.py
-
-
-def family(model):
-    for k in TEMPLATES:
-        if k in model.lower():
-            return k
-    raise ValueError(f"нет шаблона и refusal-токенов для {model}")
+from common import (COMPONENT, REFUSAL_TOKS, TEMPLATES, family, load_config, load_vectors, read_json,
+                    results_dir, splits_dir, variant, write_json, write_report)
 
 
 def main():

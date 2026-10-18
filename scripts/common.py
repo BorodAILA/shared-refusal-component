@@ -66,6 +66,23 @@ def unit(v):
     return v / v.norm()
 
 
+# Шаблоны чата и refusal-токены для шагов 05–06 — те же, что в rdo.py (иначе метрика не та, что при обучении)
+TEMPLATES = {
+    "qwen2.5": ("<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant."
+                "<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"),
+    "llama-3": ("<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
+                "{instruction}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"),
+}
+REFUSAL_TOKS = {"qwen2.5": [40, 2121], "llama-3": [40]}   # 'I', 'As' / 'I' — как в rdo.py
+
+
+def family(model):
+    for k in TEMPLATES:
+        if k in model.lower():
+            return k
+    raise ValueError(f"нет шаблона и refusal-токенов для {model}")
+
+
 # Из чего строится общая компонента (шаги 03–05): all — 4 DIM + 20 RDO; rdo — только 20 RDO,
 # тогда сравнение с DIM не круговое. Вариант rdo пишет в component_rdo/, energy_rdo/, ablation_rdo/.
 COMPONENT = os.getenv("COMPONENT", "all")
