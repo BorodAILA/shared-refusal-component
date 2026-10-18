@@ -36,10 +36,15 @@ from common import (TEMPLATES, dim_dir, family, load_config, read_json, read_man
 # --- статистика: как в concept_dim/experiments/common_axis/scripts/read_probe.py ---
 
 def auroc(pos, neg):
-    """Ранговый AUROC; знак направления произволен -> max(auc, 1-auc)."""
-    x = torch.cat([pos, neg])
-    r = torch.empty_like(x)
-    r[x.argsort()] = torch.arange(len(x), dtype=x.dtype)
+    """Ранговый AUROC; знак направления произволен -> max(auc, 1-auc).
+
+    Равным значениям — средний ранг группы: иначе при совпадающих скорах (вход слоя 0, где
+    последний токен у всех промптов один и тот же) AUROC зависел бы от порядка сортировки.
+    """
+    x = torch.cat([pos, neg]).double()
+    _, inv, counts = torch.unique(x, return_inverse=True, return_counts=True)
+    c = counts.double()
+    r = (torch.cumsum(c, 0) - (c + 1) / 2)[inv]          # средний 0-based ранг группы равных
     a = ((r[:len(pos)].sum() - len(pos) * (len(pos) - 1) / 2) / (len(pos) * len(neg))).item()
     return max(a, 1 - a)
 
@@ -149,7 +154,8 @@ def main():
     rows = []
     for L in range(n_layers):
         HP, HN = A_pos[:, L].float(), A_neg[:, L].float()
-        md = unit(HP.mean(0) - HN.mean(0))
+        diff = HP.mean(0) - HN.mean(0)
+        md = diff / diff.norm().clamp(min=1e-12)          # на входе слоя 0 разность нулевая
         for name in names:
             if name == "act_norm":
                 sp, sn = HP.norm(dim=1), HN.norm(dim=1)
