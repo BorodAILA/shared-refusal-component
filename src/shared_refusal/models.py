@@ -23,6 +23,10 @@ FAMILIES = {
                      "<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"),
         "refusal_toks": [40, 2121],           # 'I', 'As'
     },
+    "phi-4": {                                # chat_template модели: без системного промпта и переводов строк
+        "template": "<|user|>{instruction}<|end|><|assistant|>",
+        "refusal_toks": [40, 15390, 33680],   # 'I', "I'm" (в o200k — один токен), 'Sorry'
+    },
 }
 
 
