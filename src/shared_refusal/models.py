@@ -23,9 +23,15 @@ FAMILIES = {
                      "<|im_end|>\n<|im_start|>user\n{instruction}<|im_end|>\n<|im_start|>assistant\n"),
         "refusal_toks": [40, 2121],           # 'I', 'As'
     },
-    "phi-4": {                                # chat_template модели: без системного промпта и переводов строк
+    # Phi — chat_template моделей: без системного промпта и переводов строк. "phi-4-mini" раньше
+    # "phi-4": family() берёт первое совпадение подстроки.
+    "phi-4-mini": {
         "template": "<|user|>{instruction}<|end|><|assistant|>",
         "refusal_toks": [40, 15390, 33680],   # 'I', "I'm" (в o200k — один токен), 'Sorry'
+    },
+    "phi-4": {
+        "template": "<|im_start|>user<|im_sep|>{instruction}<|im_end|><|im_start|>assistant<|im_sep|>",
+        "refusal_toks": [40, 19701],          # 'I', 'Sorry' ("I'm" здесь = 'I' + "'m")
     },
 }
 
